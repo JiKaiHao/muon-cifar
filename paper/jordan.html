@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jordan：Muon 的定义</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="nav"><a href="index.html">笔记首页</a> · <a href="glossary.html">名词</a> · <a href="liu.html">下一篇</a></p>
+    <p class="kicker">汇报主讲</p>
+    <h1>Jordan：Muon 的定义</h1>
+    <p class="meta">Keller Jordan，<a href="https://kellerjordan.github.io/posts/muon/">Muon: An optimizer for hidden layers in neural networks</a>，2024-12-08。名字是 MomentUm Orthogonalized by Newton-Schulz。</p>
+  </header>
+  <main>
+    <div class="callout">上台可以用的一句：Muon 就是带动量的 SGD，只是在真正改权重之前，把这一步的矩阵拉到接近正交，让每个方向都走得动。</div>
+
+    <h2>它优化谁</h2>
+    <p>只优化隐藏层里的二维权重。全连接层的权重表直接用。卷积核先把后面三维摊平，变成一张表再用。</p>
+    <p>下面这些不要用 Muon，即使它们看起来也是一张表：</p>
+    <ul>
+      <li>输入层，语言模型里就是 embedding。</li>
+      <li>输出层，分类头或语言模型的最后一层。</li>
+      <li>偏置、归一化层的缩放这种一维或标量参数。</li>
+    </ul>
+    <p>这些留给 AdamW。Jordan 的说法是：embedding 的行为和中间层不一样；输出层则是实验上这么做更好，不完全是理论推出来的。</p>
+
+    <h2>一步里面发生什么</h2>
+    <ol class="steps">
+      <li>和带动量的 SGD 一样，先把梯度并进动量缓冲。公开实现默认用 Nesterov，也就是先沿旧方向看一步再取梯度。动量系数用 0.95。</li>
+      <li>如果参数是卷积，把它看成 <code>输出通道 × 其余维度</code> 的矩阵。</li>
+      <li>用这个矩阵的整体大小去除它，让后面的迭代从 0 到 1 之间的数开始。整体放大或缩小不影响「最近的正交矩阵」是谁，所以这一步不改变方向。</li>
+      <li>如果行比列多，先转置。这样中间相乘的那张小方阵是短边，计算更省。</li>
+      <li>重复 5 次矩阵乘法。记当前矩阵为 <code>X</code>，<code>A = X Xᵀ</code>，则
+        <p class="formula">X ← 3.4445 X + (−4.7750 A + 2.0315 A A) X</p>
+        这就是 Newton–Schulz。系数来自 Jordan 的搜索：让很小的奇异值上升得快，同时最终落在大约 0.7 到 1.3，而不是精确的 1。
+      </li>
+      <li>如果刚才转置过，转回来。</li>
+      <li>Jordan 自己再乘上 <code>√max(1, 行/列)</code>，用来补偿长方形矩阵。我们的实验不乘这个，而用下一篇 Liu 等的缩放。</li>
+      <li>权重减去学习率乘以这个矩阵。学习率的单位可以理解成「谱范数意义下走多远」，汇报时不必展开。</li>
+    </ol>
+    <p>整段迭代可以放在 bfloat16 里做，GPU 上稳定。Jordan 比较过另外两条路：直接 SVD 太慢；Shampoo 里用的 coupled Newton 往往要 float32，也慢。Newton–Schulz 因此被选中。</p>
+
+    <h2>为什么要把更新正交化</h2>
+    <p>Jordan 看过 Transformer 里 SGD 动量和 Adam 产生的更新，条件数很高：矩阵几乎是低秩的，所有神经元的更新被少数几个方向主导。</p>
+    <p>正交化把大方向压一压，把那些本该存在、但数值很小的方向抬起来。他的猜测是，这些「少见的方向」对学习仍然重要。汇报时用这个直觉即可。</p>
+    <p>更理论的说法是：这等于把更新换成 <code>U Vᵀ</code>，其中 <code>U Σ Vᵀ</code> 是更新的奇异值分解。也就是方向留下，奇异值全部换成 1。Bernstein 解释过这为什么是谱范数下的最速下降。那篇不上台。</p>
+
+    <h2>五步够不够</h2>
+    <p>那些系数让小奇异值上升很快，所以不用迭代到完全收敛。Jordan 在 Transformer 和小卷积网上试过，5 步就够。他也试过 3 次和 7 次多项式，墙钟时间没有更好。</p>
+    <p>因为目标区间是大约 0.7 到 1.3，而不是精确的 1，所以「算得更正交」不等于「训得更好」。这是我们期末只改步数的理由。Liu 等后来也写了：10 步比 5 步更正交，但损失没有更好。</p>
+
+    <h2>额外计算有多大</h2>
+    <p>动量本身和 SGD 一样，多出来的是那 5 次矩阵乘法。对一个线性层，这笔额外计算相对前向加反向，大约是 <code>5 × 模型宽度 / 每步 token 数</code>。Jordan 估算 NanoGPT 速度赛大约 0.7%，Llama 405B 那种大批量大约 0.5%。都不到 1%。</p>
+    <p>我们的 CIFAR ResNet 批量只有 128 张图，这个比例会高一些，但模型很小，一步仍然只要十几秒量级。汇报不必报我们的计时。</p>
+
+    <h2>和更早工作的差别</h2>
+    <p>这些只是笔记里的定位，汇报点到名字即可，不要展开。</p>
+    <ul>
+      <li><strong>Shampoo</strong>（Gupta 等，2018）。如果拿掉它的统计累积，更新会变成同一种 <code>U Vᵀ</code>。Muon 可以看成「不做累积、用 Newton–Schulz 代替四次方根」的近亲，并且动量加在正交化之前。</li>
+      <li><strong>Orthogonal-SGDM</strong>（Tuddenham 等，2022）。先正交化梯度，再做动量。Muon 把顺序倒过来，Jordan 说这样更好，而且用 Newton–Schulz 代替 SVD。</li>
+      <li><strong>随机谱下降</strong>（Carlson 等，2015）。更早用 SVD 做正交化，没有动量。Carlson 也试过用随机 SVD 加快，仍然不是 Newton–Schulz。</li>
+    </ul>
+
+    <h2>原文里能念的结果</h2>
+    <p>这些是 Jordan 自己的速度赛和小模型实验，不是我们的结果。念的时候要说「原文报告」。</p>
+    <table>
+      <tr><th>任务</th><th>原文说法</th></tr>
+      <tr><td>CIFAR-10 到 94% 准确率</td><td>速度纪录从 3.3 降到 2.6 个 A100-秒。</td></tr>
+      <tr><td>NanoGPT 速度赛，FineWeb 上验证损失 3.28</td><td>换上 Muon 后速度大约 1.35 倍，并且之后多条新纪录仍用 Muon。</td></tr>
+      <tr><td>1.5B 参数，HellaSwag 追到 GPT-2 XL</td><td>Muon 用 10 个 8×H100 小时，同样结果的 AdamW 用 13.3 小时。两边都调过参。</td></tr>
+    </table>
+    <p>他还强调：很多新优化器号称打过 AdamW，其实是基线没调好。所以他把证据放在有人抢纪录的任务上。我们的课程实验做不到那种规模，期末报告里应写成「小规模可复现对比」，不要写成「复现了这些纪录」。</p>
+
+    <h2>还有两条经验</h2>
+    <ul>
+      <li>注意力的 Q、K、V 如果分成三张矩阵分别正交化，比合成一大张再切开更好。我们的 ResNet 没有注意力，这条用不上。</li>
+      <li>原始博客实现里可以不加权重衰减。下一篇说明，模型变大、训练变长之后，衰减变得重要。</li>
+    </ul>
+  </main>
+  <footer><a href="index.html">回到首页</a> · 下一篇 <a href="liu.html">Liu 等的两处改动</a></footer>
+</body>
+</html>

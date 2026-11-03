@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muon 调研笔记</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="kicker">吉大优化课程 · 同一个题目的调研阶段</p>
+    <h1>Muon 调研笔记</h1>
+    <p class="meta">给初学者准备汇报用。材料写于 2026-09-30，依据原文复述，不是翻译全篇。</p>
+  </header>
+  <main>
+    <p>第 7–8 周的论文汇报和大作业是一件事。汇报只讲算法，不讲我们自己的 CIFAR 实验，也不推导谱范数。期末再讲实现、和 AdamW、带动量 SGD 的对比，以及 Newton–Schulz 步数消融。</p>
+
+    <h2>建议阅读顺序</h2>
+    <div class="cards">
+      <a class="card" href="glossary.html">
+        <span class="tag">先看</span>
+        <strong>名词</strong>
+        <p>动量、正交、RMS、权重衰减。后面两篇笔记里的词都在这里。</p>
+      </a>
+      <a class="card" href="jordan.html">
+        <span class="tag">汇报主讲</span>
+        <strong>Jordan：Muon 的定义</strong>
+        <p>隐藏层矩阵先走动量，再用几次矩阵乘法把更新拉近正交。分类头和偏置仍用 AdamW。</p>
+      </a>
+      <a class="card" href="liu.html">
+        <span class="tag">汇报带过</span>
+        <strong>Liu 等：两处实用改动</strong>
+        <p>权重衰减，以及把更新的典型大小对齐到 AdamW。大模型训练只留在笔记里，上台不展开。</p>
+      </a>
+      <a class="card" href="experiment.html">
+        <span class="tag">期末用</span>
+        <strong>这两篇怎么落到我们的实验</strong>
+        <p>CIFAR ResNet-18、已经选定的学习率、步数消融为什么只动这一个旋钮。</p>
+      </a>
+    </div>
+
+    <h2>汇报里讲什么</h2>
+    <table>
+      <tr><th>讲</th><th>不讲</th></tr>
+      <tr>
+        <td>带动量 SGD 的更新里，少数方向会特别大。</td>
+        <td>谱范数最速下降的推导。期末报告用一句话带过即可。</td>
+      </tr>
+      <tr>
+        <td>Muon 用 Newton–Schulz 把更新近似正交化，重复 5 次。</td>
+        <td>系数 <code>(3.4445, -4.7750, 2.0315)</code> 是怎么搜出来的。</td>
+      </tr>
+      <tr>
+        <td>哪些参数用 Muon，哪些留下给 AdamW。</td>
+        <td>分布式训练、ZeRO、Moonlight 的 16B 模型和榜单。</td>
+      </tr>
+      <tr>
+        <td>Liu 等加了权重衰减，并把每一步的典型大小对齐到 AdamW。</td>
+        <td>我们自己还在跑的 CIFAR 曲线。</td>
+      </tr>
+    </table>
+
+    <h2>原文</h2>
+    <ul>
+      <li>Keller Jordan，<a href="https://kellerjordan.github.io/posts/muon/">Muon: An optimizer for hidden layers in neural networks</a>，2024-12-08。代码在 <a href="https://github.com/KellerJordan/Muon">KellerJordan/Muon</a>。</li>
+      <li>Jingyuan Liu 等，<a href="https://arxiv.org/abs/2502.16982">Muon is Scalable for LLM Training</a>，arXiv:2502.16982，2025-02-24。代码在 <a href="https://github.com/MoonshotAI/Moonlight">MoonshotAI/Moonlight</a>。</li>
+    </ul>
+    <p>查过但不上台的一篇：Jeremy Bernstein，<a href="https://jeremybernste.in/writing/deriving-muon">Deriving Muon</a>。它解释正交化为什么是谱范数下的最速下降。留给期末报告的背景句，不作为汇报篇目。</p>
+  </main>
+  <footer>本地打开本文件即可。页面之间用相对链接，不需要网络。</footer>
+</body>
+</html>

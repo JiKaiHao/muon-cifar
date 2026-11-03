@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>落到我们的实验</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="nav"><a href="index.html">笔记首页</a> · <a href="liu.html">上一篇</a></p>
+    <p class="kicker">期末用 · 汇报不要放这些曲线</p>
+    <h1>这两篇怎么落到实验</h1>
+    <p class="meta">第 7–8 周不讲本页的数字。本页用来对齐代码、学习率和期末要写的那一个旋钮。</p>
+  </header>
+  <main>
+    <h2>问题</h2>
+    <p>在同一套小模型、同一次数的训练上，比较三种优化器。不复现 Moonlight，也不去追 CIFAR-10 或 NanoGPT 的速度纪录。</p>
+    <table>
+      <tr><th></th><th>谁来更新</th></tr>
+      <tr><td>卷积，摊成矩阵之后</td><td>Muon。动量 0.95，Nesterov，Newton–Schulz，权重衰减，RMS 对齐。</td></tr>
+      <tr><td>BatchNorm、偏置、最后的分类头</td><td>AdamW。</td></tr>
+      <tr><td>对照 1</td><td>所有参数都用带动量的 SGD，动量 0.9，不用 Nesterov。</td></tr>
+      <tr><td>对照 2</td><td>所有参数都用 AdamW，<code>β = (0.9, 0.999)</code>。</td></tr>
+    </table>
+    <p>模型是 CIFAR 版 ResNet-18，11,173,962 个参数。其中约 11,159,232 个进 Muon，约 14,730 个进 AdamW。数据是 CIFAR-10，训练时做四周填充、随机裁回 32×32、随机水平翻转。批量 128。</p>
+
+    <h2>学习率怎么选定</h2>
+    <p>每种优化器用 15 个 epoch、1 个种子扫三个学习率，留下测试准确率最高的那个。15 个 epoch 里 cosine 降得很快，准确率会偏高，所以这些数字只用来选学习率，不写进最终表。</p>
+    <table>
+      <tr><th>优化器</th><th>候选</th><th>选定</th><th>那次的测试准确率</th></tr>
+      <tr><td>SGD</td><td>0.05 / 0.1 / 0.2</td><td>0.05</td><td>91.06%。0.1 是 91.05%，几乎一样。</td></tr>
+      <tr><td>AdamW</td><td>3e-4 / 1e-3 / 3e-3</td><td>1e-3</td><td>90.91%</td></tr>
+      <tr><td>Muon</td><td>3e-4 / 1e-3 / 3e-3</td><td>3e-3</td><td>93.71%。1e-3 是 93.59%。</td></tr>
+    </table>
+    <p>正式对比是 100 个 epoch、种子 0、1、2，前 5 个 epoch 线性 warmup，然后 cosine 降到 0。权重衰减三种都是 <code>5e-4</code>。Muon 这一轮的 Newton–Schulz 步数固定为 5。</p>
+
+    <h2>创新点只动步数</h2>
+    <p>Liu 等写过：10 步比 5 步更正交，准确率却没有更好。Jordan 也说，他们的系数故意不收敛到精确的 1。</p>
+    <p>所以期末只改 Newton–Schulz 的步数，例如 1、2、3、5。每个设置记录两件事：</p>
+    <ul>
+      <li>测试准确率。</li>
+      <li>更新离正交有多远。短边那一侧看 <code>UᵀU</code> 或 <code>UUᵀ</code> 离单位阵的相对 Frobenius 距离。</li>
+    </ul>
+    <p>权重衰减和 RMS 对齐保持打开。这两项是 Liu 等已经发表的，用来让对比公平，不另报成我们的贡献。</p>
+    <p>随机矩阵上可以事先看到：步数从 0 加到 2，离真正的极分解近得很快；再往上会晃，不会单调变好。这是系数把零点斜率做得很陡的结果。真实训练里是否同样，等消融跑完再写，不要先下结论。</p>
+
+    <h2>两阶段分别交什么</h2>
+    <table>
+      <tr><th>时间</th><th>内容</th></tr>
+      <tr><td>第 7–8 周</td><td>按 <a href="jordan.html">Jordan</a> 讲算法，用 <a href="liu.html">Liu 等</a> 带过衰减和 RMS。不放本页的表。</td></tr>
+      <tr><td>第 10 周前</td><td>一页提案：目标和「全体一起做」。稿在 <code>proposal/提案.md</code>，姓名还空着。</td></tr>
+      <tr><td>第 15–16 周</td><td>讲我们的实验：三种优化器，加上步数消融。</td></tr>
+      <tr><td>第 16 周</td><td>英文报告，ICLR 模板，长于 6 页、短于 10 页。</td></tr>
+    </table>
+  </main>
+  <footer><a href="index.html">回到首页</a></footer>
+</body>
+</html>

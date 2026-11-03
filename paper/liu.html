@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liu 等：两处实用改动</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <p class="nav"><a href="index.html">笔记首页</a> · <a href="jordan.html">上一篇</a> · <a href="experiment.html">我们的实验</a></p>
+    <p class="kicker">汇报带过 · arXiv:2502.16982</p>
+    <h1>Liu 等：两处实用改动</h1>
+    <p class="meta">Jingyuan Liu、Jianlin Su、Xingcheng Yao 等，Moonshot AI 与 UCLA，<a href="https://arxiv.org/abs/2502.16982">Muon is Scalable for LLM Training</a>，2025-02-24。他们用改过的 Muon 训练了 Moonlight。</p>
+  </header>
+  <main>
+    <div class="callout">上台可以用的一句：Jordan 的 Muon 在小模型上已经很快，变大以后权重会胀、不同形状的矩阵步长也不一样。这篇加了权重衰减，并把每一步的典型大小对齐到 AdamW。</div>
+
+    <h2>他们接过的算法</h2>
+    <p>和 Jordan 相同的骨架，写出来是：</p>
+    <p class="formula">动量 ← μ × 动量 + 梯度<br>正交更新 ← Newton–Schulz(动量)<br>权重 ← 权重 − 学习率 × 正交更新</p>
+    <p>实际计算时，送进 Newton–Schulz 的是 Nesterov 形式，不是裸的动量缓冲。系数仍是 <code>3.4445, −4.7750, 2.0315</code>。先把矩阵除以它的 Frobenius 范数，再迭代。这些都跟着 Jordan，不是新的。</p>
+
+    <h2>改动一：权重衰减</h2>
+    <p>小模型上 Muon 明显好于 AdamW。模型和 token 变多以后，这个优势变小。他们看到权重和层输出的 RMS 一直涨，会涨出 bfloat16 比较精确的范围。</p>
+    <p>原始 Muon 没有权重衰减。他们加上 AdamW 那种分开做的衰减：</p>
+    <p class="formula">权重 ← 权重 − 学习率 × (正交更新 + λ × 权重)</p>
+    <p>一个 800M 模型、100B token 的实验里（大约是当时认为的最优 token 数的 5 倍，也就是故意训得比较久）：</p>
+    <ul>
+      <li>没有衰减的 Muon 开头下降更快。</li>
+      <li>训久了，有衰减的 Muon 验证损失更低，也低于 AdamW。</li>
+    </ul>
+    <p>所以后面的实验都带衰减。我们的代码用同一形式，权重衰减系数和 AdamW 基线相同，都是 <code>5e-4</code>。这是沿用，不算我们的改动。</p>
+
+    <h2>改动二：让一步的典型大小跟形状无关</h2>
+    <p>AdamW 有一个好用的性质：不管这个参数是大矩阵还是小向量，它一步里「典型的一个元素」大小在理论上接近 1。因为 <code>β1 &lt; β2</code> 而且有一个很小的 <code>ε</code>，实际常常在 0.2 到 0.4。</p>
+    <p>Muon 正交化之后没有这个性质。一篇满秩的 <code>A × B</code> 矩阵，正交更新的理论 RMS 是</p>
+    <p class="formula">1 / √max(A, B)</p>
+    <p>矩阵越大，每一步里每个数越小。两种坏情况：</p>
+    <ul>
+      <li>大矩阵，比如很宽的 MLP，步子小到学不动。</li>
+      <li>把本该合成一张的矩阵拆得太碎，步子又太大，训练不稳。</li>
+    </ul>
+    <p>他们用形状把这个因子消掉，再乘 0.2，去靠近 AdamW 的经验 RMS：</p>
+    <p class="formula">权重 ← 权重 − 学习率 × (0.2 × 正交更新 × √max(A, B) + λ × 权重)</p>
+    <p>这样做完，矩阵参数和那些仍由 AdamW 管的参数可以共用学习率、共用权重衰减，不用为 Muon 另调一套。</p>
+    <p>Jordan 原来乘的是 <code>√max(1, A/B)</code>。那只补偿长宽比。如果所有矩阵的第二维都差不多，它和 Liu 等的因子只差一个全局常数。形状差得远时，两者不一样。我们的正式实验用 Liu 等这个因子，代码里的名字是 <code>match_rms_adamw</code>。</p>
+
+    <h3>他们怎么选这个因子</h3>
+    <p>在大约 800M 的模型上，训练早期比较了三种控制 RMS 的办法：</p>
+    <table>
+      <tr><th>办法</th><th>在做什么</th><th>结果</th></tr>
+      <tr><td>基线</td><td>一律乘 <code>0.2 √H</code>，H 是隐藏层宽度。大多数矩阵的长边正好是 H。</td><td>最差。</td></tr>
+      <tr><td>直接归一</td><td>每一步都把正交更新的 RMS 硬调成 0.2。</td><td>损失更好，但每步都要算一次 RMS。</td></tr>
+      <tr><td>按形状调学习率</td><td>就是上面的 <code>0.2 √max(A,B)</code>。</td><td>损失和直接归一差不多，更便宜。他们选了这个。</td></tr>
+    </table>
+    <p>这个比较用的模型把 MLP 改宽了一点（<code>H × 4H</code> 而不是大约 <code>H × 2.6H</code>），好让形状差异更明显。总计划训练 200 亿 token，他们在训完 40 亿时看损失。细节不用上台讲，知道「他们选了便宜且同样有效的那种」即可。</p>
+
+    <h2>步数和动量</h2>
+    <p>Newton–Schulz 做 10 步，会比 5 步更接近真正的正交矩阵，但模型表现没有更好。他们为了省事用 5 步。动量调来调去没有稳定的好处，所以仍用 Jordan 的 0.95。</p>
+    <div class="callout">这句是我们期末消融的直接动机：论文说「更正交」没有带来更好的损失。我们在 CIFAR 上只改步数，自己量正交残差和测试准确率。汇报时只能说论文的结论，不能提前报我们还没写进报告的数字。</div>
+
+    <h2>大模型部分：笔记里留着，汇报不展开</h2>
+    <p>知道这些句子，被问到能答，不要做成幻灯片的主体。</p>
+    <ul>
+      <li>在一组从大约 4 亿到 15 亿参数的稠密模型上，按计算最优的 token 数去训。Muon 直接沿用为 AdamW 搜过的学习率和权重衰减。拟合之后，Muon 达到同样损失大约只要 AdamW 的 52% 计算量，也就是大约 2 倍计算效率。</li>
+      <li>AdamW 的基线做了网格搜索。他们强调优化器论文最常见的问题就是基线没调好，这一点和 Jordan 的提醒一样。</li>
+      <li>Moonlight 是一个 MoE。不算 embedding 时大约 22 亿激活参数、153 亿总参数；算上 embedding 时大约是宣传里的 3B/16B。用 5.7T token 预训练，上下文 8K。权重衰减 0.1。同一架构、同一数据上还有一个 AdamW 对照，叫 Moonlight-A。</li>
+      <li>分布式实现叫 Distributed Muon。AdamW 可以每个元素分开更新，Muon 必须看到整张梯度矩阵才能正交化，所以要先把切在各卡上的梯度拼回来，做完 Newton–Schulz，再只留下本卡那一块去更新。优化器状态只有一份动量，大约是 AdamW 两份动量的一半内存。他们说优化器多出来的时间相对前向反向可以忽略，大约 1% 到 3%。我们是单卡，这段用不到。</li>
+    </ul>
+
+    <h2>我们采用什么</h2>
+    <table>
+      <tr><th>论文里的设计</th><th>我们的实验</th></tr>
+      <tr><td>动量 0.95，Nesterov，Newton–Schulz 5 步，同一组系数</td><td>正式对比照做。消融时只改步数。</td></tr>
+      <tr><td>权重衰减</td><td>打开，和 AdamW 共用 <code>5e-4</code>。</td></tr>
+      <tr><td><code>0.2 √max(A,B)</code></td><td>打开。所以 Muon 的学习率可以和 AdamW 放在同一量级里搜。</td></tr>
+      <tr><td>非矩阵参数用 AdamW</td><td>BatchNorm、偏置、分类头用 AdamW。卷积用 Muon。</td></tr>
+      <tr><td>16B 预训练、分布式正交化</td><td>不做。</td></tr>
+    </table>
+  </main>
+  <footer><a href="index.html">回到首页</a> · 下一篇 <a href="experiment.html">落到我们的实验</a></footer>
+</body>
+</html>
