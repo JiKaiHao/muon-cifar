@@ -1,0 +1,72 @@
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{hyperref}
+
+\geometry{left=1.9cm,right=1.9cm,top=1.55cm,bottom=1.45cm}
+\hypersetup{hidelinks}
+\pagestyle{empty}
+\setlength{\parindent}{2em}
+\setlength{\parskip}{0.28em}
+\linespread{1.12}\selectfont
+\setlist[itemize]{leftmargin=1.7em,itemsep=0.42em,topsep=0.35em,parsep=0pt}
+
+\definecolor{ink}{HTML}{1C1C1C}
+\definecolor{rule}{HTML}{1F3A5F}
+\definecolor{muted}{HTML}{4A4A4A}
+\color{ink}
+
+\titleformat{\section}
+  {\normalsize\bfseries\color{rule}}
+  {}{0pt}{}
+  [\vspace{0.15em}{\color{rule}\titlerule[0.6pt]}]
+\titlespacing*{\section}{0pt}{1.05em}{0.48em}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+\begin{document}
+
+\begin{center}
+  {\small\color{muted} 吉林大学\quad 统计计算\quad 大作业提案}\\[0.55em]
+  {\LARGE\bfseries CIFAR-10 上 Muon、AdamW 与 SGD 的对比}\\[0.55em]
+  {\normalsize 季楷昊 \quad 于志盛 \quad 刘东旭}
+\end{center}
+\vspace{-0.15em}
+\noindent{\color{rule}\rule{\linewidth}{0.8pt}}
+
+\section{目标}
+在同一模型、同一训练预算下，实现优化器 Muon，并与 AdamW、带动量 SGD 做可复现对比。实验放在单台 GPU 能跑完的 CIFAR-10 上，不复现大模型预训练。唯一考察的改动是 Newton--Schulz 迭代步数：步数变化后，更新离正交有多远，测试准确率是否跟着变。
+
+\section{做法}
+卷积等矩阵参数使用 Muon：动量更新后，用数步 Newton--Schulz 迭代近似极分解，使更新接近谱范数下的最速下降方向。批归一化、偏置和分类头仍用 AdamW。对照是同一套 CIFAR ResNet-18、同一数据增强和同一 epoch 预算下的全参数 AdamW 与全参数带动量 SGD。记录测试准确率、训练用时，以及更新矩阵的正交残差。权重衰减和更新 RMS 对齐采用已发表设定并固定打开，使 Muon 可以和 AdamW 共用学习率，这两项不另报成创新。
+
+\section{团队分工}
+三人分工如下。期末课堂汇报与英文书面报告的执笔、主讲尚未拆开，暂定由全组共同完成，实验收口后再定。
+
+\vspace{0.45em}
+{\renewcommand{\arraystretch}{1.42}
+\noindent\begin{tabularx}{\linewidth}{@{}p{2.8cm} Y@{}}
+  \toprule
+  \textbf{成员} & \textbf{承担工作} \\
+  \midrule
+  季楷昊 & 项目选题调研；项目框架与初版代码。 \\
+  于志盛 & 项目方案讨论；中期论文汇报与 PPT 制作。 \\
+  刘东旭 & 项目方案讨论；项目代码迭代与完整实验。 \\
+  全组（暂定） & 期末课堂汇报，以及英文书面报告。具体分工待定。 \\
+  \bottomrule
+\end{tabularx}}
+
+\section{进度与产出}
+\begin{itemize}
+  \item 第 7--8 周：中期论文汇报。只讲 Muon 的定义与两处已发表的实用改动，不讲本组 CIFAR 实验。
+  \item 第 10 周前：提交本提案。
+  \item 第 15--16 周：期末汇报本组实现、三优化器对比，以及 Newton--Schulz 步数消融。
+  \item 第 16 周：提交英文书面报告，使用 ICLR 模板，长于 6 页、短于 10 页。
+\end{itemize}
+
+\end{document}
