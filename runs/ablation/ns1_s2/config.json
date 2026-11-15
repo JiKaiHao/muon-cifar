@@ -1,0 +1,16 @@
+{
+  "optimizer": "muon",
+  "epochs": 100,
+  "batch_size": 128,
+  "lr": 0.003,
+  "aux_lr": 0.003,
+  "weight_decay": 0.0005,
+  "momentum": 0.95,
+  "ns_steps": 1,
+  "adjust_lr": "match_rms_adamw",
+  "warmup_epochs": 5,
+  "seed": 2,
+  "parameters": 11173962,
+  "muon_parameters": 11159232,
+  "aux_parameters": 14730
+}

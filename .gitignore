@@ -1,5 +1,16 @@
 data/
-runs/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Training outputs stay local except the small artefacts a reader needs to
+# check the numbers: per-run histories, per-run configs, the summary table and
+# the two figures. Checkpoints (~45 MB each) and launcher logs stay out.
+runs/*
+!runs/summary.md
+!runs/main/
+!runs/ablation/
+!runs/sweep/
+!runs/sgd_lr01/
+runs/**/*.pt
+runs/_launcher/
